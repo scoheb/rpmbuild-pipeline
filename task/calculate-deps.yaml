@@ -34,6 +34,10 @@ spec:
     - name: ociStorage
       description: The OCI repository where the Trusted Artifacts are stored.
       type: string
+    - description: Maximum seconds to wait for SSH credentials to appear
+      name: ssh-wait-seconds
+      type: string
+      default: "300"
   results:
     - name: calculation-artifact
       description: The Trusted Artifact URI pointing to the artifact with the result of the deps calculation.
@@ -58,16 +62,30 @@ spec:
           exit 0
         fi
         mkdir -p ~/.ssh
-        if [ -e "/ssh/error" ]; then
-          #no server could be provisioned
-          cat /ssh/error
-          exit 1
-        elif [ -e "/ssh/otp" ]; then
-         curl --cacert /ssh/otp-ca -XPOST -d @/ssh/otp $(cat /ssh/otp-server) >~/.ssh/id_rsa
-         echo "" >> ~/.ssh/id_rsa
-        else
-          cp /ssh/id_rsa ~/.ssh
-        fi
+        start_time=$(date +%s)
+        timeout_seconds=$(params.ssh-wait-seconds)
+        while true; do
+          if [[ -e "/ssh/error" ]]; then
+            #no server could be provisioned
+            cat /ssh/error
+            exit 1
+          elif [[ -e "/ssh/otp" ]]; then
+            curl --cacert /ssh/otp-ca -XPOST -d @/ssh/otp $(cat /ssh/otp-server) >~/.ssh/id_rsa
+            echo "" >> ~/.ssh/id_rsa
+            break
+          elif [[ -e "/ssh/id_rsa" ]]; then
+            cp /ssh/id_rsa ~/.ssh
+            break
+          fi
+
+          now=$(date +%s)
+          elapsed=$(( now - start_time ))
+          if [ "$elapsed" -ge "$timeout_seconds" ]; then
+            echo "Timed out (${timeout_seconds}s) waiting for /ssh/otp or /ssh/id_rsa" >&2
+            exit 1
+          fi
+          sleep 2
+        done
 
         arch=x86_64
         case $(params.PLATFORM) in
