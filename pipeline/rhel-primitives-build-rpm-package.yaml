@@ -23,7 +23,7 @@ spec:
           - name: name
             value: summary
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-summary:0.2@sha256:3f6e8513cbd70f0416eb6c6f2766973a754778526125ff33d8e3633def917091
+            value: quay.io/redhat-appstudio-tekton-catalog/task-summary:0.2@sha256:599d8b12c4f34ca3c386cb5c18af532cdc5f0773c0477044bbf4fe8591940725
           - name: kind
             value: task
         resolver: bundles
@@ -97,19 +97,13 @@ spec:
         configuration, dist-git-client, koji-client, and other RPM-build related
         tooling.
       name: script-environment-image
-      default: quay.io/redhat-user-workloads/rpm-build-pipeline-tenant/environment:latest@sha256:56bde7a1040650bc14ee927534426a52d88de30d588048c6a08be7a8758372cb
+      default: quay.io/scoheb/script-environment-image:mock-hermetic-repo-client-cert-patch
       type: string
     - name: ociStorage
       description: |
         OCI registry URL where the pipeline stores trusted artifacts, including
         both resulting artifacts and intermediary by-products.
       default: quay.io/redhat-user-workloads/$(context.taskRun.namespace)/$(params.package-name)
-    - description: |
-        Name of specfile when specfile doesn't have the same prefix name as package name.
-        Default is null and package-name.spec is used.
-      name: specfile
-      type: string
-      default: "null"
 
     # This part is commented out because the parameter is not usable.  We don't
     # seem to be able to pass the given parameter down to override
@@ -184,7 +178,7 @@ spec:
           - name: name
             value: init
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-init:0.2@sha256:3ca52e1d8885fc229bd9067275f44d5b21a9a609981d0324b525ddeca909bf10
+            value: quay.io/redhat-appstudio-tekton-catalog/task-init:0.2@sha256:ebfb603b73c2e1500fa1d2c757a585bc2da5043afe0798abdf61466e26fd2b0c
           - name: kind
             value: task
         resolver: bundles
@@ -208,14 +202,14 @@ spec:
           - name: name
             value: git-clone-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:bb2f8f1edec47faa08c1929f2ffc6748f3a96af9644e6c40000081c6ff3ec894
+            value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:4a601aeec58a1dd89c271e728fd8f0d84777825b46940c3aec27f15bab3edacf
           - name: kind
             value: task
         resolver: bundles
       workspaces:
         - name: basic-auth
           workspace: git-auth
-    - name: process-sources
+    - name: get-rpm-sources
       retries: 3
       taskRef:
         resolver: git
@@ -225,7 +219,7 @@ spec:
           - name: revision
             value: $(params.self-ref-revision)
           - name: pathInRepo
-            value: task/process-sources.yaml
+            value: task/get-rpm-sources.yaml
           - name: ociArtifactExpiresAfter
             value: 14d
       runAfter:
@@ -233,8 +227,6 @@ spec:
       params:
         - name: package-name
           value: $(params.package-name)
-        - name: specfile
-          value: $(params.specfile)
         - name: source-artifact
           value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
         - name: ociStorage
@@ -249,9 +241,26 @@ spec:
           value: $(params.path-context)
         - name: build-architectures
           value: ["$(params.build-architectures[*])"]
+    - name: generate-mock-config-x86-64
+      runAfter:
+        - get-rpm-sources
+      params:
+        - name: arch
+          value: x86_64
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
     - name: calculate-deps-x86-64
       runAfter:
-        - process-sources
+        - generate-mock-config-x86-64
       params:
         - name: package-name
           value: $(params.package-name)
@@ -259,18 +268,20 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-x86-64.results.mock-config-file)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.deps-x86_64)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-x86_64)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: ociStorage
           value: $(params.ociStorage).calculation-x86_64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
+        - name: additional-secret
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -292,21 +303,19 @@ spec:
         - name: koji-target
           value: $(params.koji-target)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.build-x86_64)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.build-x86_64)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: hermetic
           value: $(params.hermetic)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: calculation-artifact
           value: $(tasks.calculate-deps-x86-64.results.calculation-artifact)
         - name: ociStorage
           value: $(params.ociStorage).rpmbuild-x86_64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
       taskRef:
         resolver: git
         params:
@@ -316,9 +325,26 @@ spec:
             value: $(params.self-ref-revision)
           - name: pathInRepo
             value: task/rpmbuild.yaml
+    - name: generate-mock-config-aarch64
+      runAfter:
+        - get-rpm-sources
+      params:
+        - name: arch
+          value: aarch64
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
     - name: calculate-deps-aarch64
       runAfter:
-        - process-sources
+        - generate-mock-config-aarch64
       params:
         - name: package-name
           value: $(params.package-name)
@@ -326,18 +352,20 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-aarch64.results.mock-config-file)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.deps-aarch64)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-aarch64)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: ociStorage
           value: $(params.ociStorage).calculation-aarch64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
+        - name: additional-secret
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -359,21 +387,19 @@ spec:
         - name: koji-target
           value: $(params.koji-target)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.build-aarch64)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.build-aarch64)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: hermetic
           value: $(params.hermetic)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: calculation-artifact
           value: $(tasks.calculate-deps-aarch64.results.calculation-artifact)
         - name: ociStorage
           value: $(params.ociStorage).rpmbuild-aarch64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
       taskRef:
         resolver: git
         params:
@@ -383,9 +409,26 @@ spec:
             value: $(params.self-ref-revision)
           - name: pathInRepo
             value: task/rpmbuild.yaml
+    - name: generate-mock-config-s390x
+      runAfter:
+        - get-rpm-sources
+      params:
+        - name: arch
+          value: s390x
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
     - name: calculate-deps-s390x
       runAfter:
-        - process-sources
+        - generate-mock-config-s390x
       params:
         - name: package-name
           value: $(params.package-name)
@@ -393,18 +436,20 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-s390x.results.mock-config-file)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.deps-s390x)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-s390x)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: ociStorage
           value: $(params.ociStorage).calculation-s390x
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
+        - name: additional-secret
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -426,21 +471,19 @@ spec:
         - name: koji-target
           value: $(params.koji-target)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.build-s390x)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.build-s390x)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: hermetic
           value: $(params.hermetic)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: calculation-artifact
           value: $(tasks.calculate-deps-s390x.results.calculation-artifact)
         - name: ociStorage
           value: $(params.ociStorage).rpmbuild-s390x
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
       taskRef:
         resolver: git
         params:
@@ -450,9 +493,26 @@ spec:
             value: $(params.self-ref-revision)
           - name: pathInRepo
             value: task/rpmbuild.yaml
+    - name: generate-mock-config-ppc64le
+      runAfter:
+        - get-rpm-sources
+      params:
+        - name: arch
+          value: ppc64le
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
     - name: calculate-deps-ppc64le
       runAfter:
-        - process-sources
+        - generate-mock-config-ppc64le
       params:
         - name: package-name
           value: $(params.package-name)
@@ -460,18 +520,20 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-ppc64le.results.mock-config-file)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.deps-ppc64le)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-ppc64le)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: ociStorage
           value: $(params.ociStorage).calculation-ppc64le
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
+        - name: additional-secret
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -493,21 +555,19 @@ spec:
         - name: koji-target
           value: $(params.koji-target)
         - name: PLATFORM
-          value: $(tasks.process-sources.results.skip-mpc-tasks.build-ppc64le)
+          value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.build-ppc64le)
         - name: script-environment-image
           value: $(params.script-environment-image)
         - name: hermetic
           value: $(params.hermetic)
         - name: dependencies-artifact
-          value: $(tasks.process-sources.results.dependencies-artifact)
+          value: $(tasks.get-rpm-sources.results.dependencies-artifact)
         - name: calculation-artifact
           value: $(tasks.calculate-deps-ppc64le.results.calculation-artifact)
         - name: ociStorage
           value: $(params.ociStorage).rpmbuild-ppc64le
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: specfile
-          value: $(params.specfile)
       taskRef:
         resolver: git
         params:
