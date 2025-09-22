@@ -114,7 +114,7 @@ spec:
             echo "Retrying in $sleep_time seconds."
             sleep $sleep_time
         done
- 
+
         if test "$(params.specfile)" != "null" ; then
           specfile_name=$(params.specfile)
         else
@@ -123,10 +123,14 @@ spec:
         fi
 
         success=true
+        VOLUME_MOUNTS=(
+          -v "$HOMEDIR/source:/source"
+          -v "$HOMEDIR/results:/results"
+        )
+
         remote_cmd podman run -u mockbuilder \
                               -e KOJI_TARGET="$(params.koji-target)" \
-                              -v "$HOMEDIR/source:/source" \
-                              -v "$HOMEDIR/results:/results" \
+                              "${VOLUME_MOUNTS[@]}" \
                               --init --privileged --rm -ti "$mock_img" \
             mock -r fedora-rawhide-"$arch" \
                 --spec /source/$specfile_name \
