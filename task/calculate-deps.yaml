@@ -44,6 +44,10 @@ spec:
       description: Additional volume mounts needed for the build
       name: ADDITIONAL_VOLUME_MOUNTS
       type: array
+    - default: does-not-exist
+      description: Name of a secret which will be made available to the mock command
+      name: ADDITIONAL_SECRET
+      type: string
   results:
     - name: calculation-artifact
       description: The Trusted Artifact URI pointing to the artifact with the result of the deps calculation.
@@ -183,12 +187,17 @@ spec:
         - mountPath: /ssh
           name: ssh
           readOnly: true
+        - mountPath: /additional-secret
+          name: additional-secret
       args:
       - --additional-volume-mounts
       - $(params.ADDITIONAL_VOLUME_MOUNTS[*])
       computeResources:
         requests:
           ephemeral-storage: 5Gi
+      env:
+      - name: ADDITIONAL_SECRET
+        value: $(params.ADDITIONAL_SECRET)
     - name: create-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
       args:
@@ -203,3 +212,7 @@ spec:
         secretName: multi-platform-ssh-$(context.taskRun.name)
     - name: workdir
       emptyDir: {}
+    - name: additional-secret
+      secret:
+        optional: true
+        secretName: $(params.ADDITIONAL_SECRET)
