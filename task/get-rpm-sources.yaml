@@ -27,6 +27,10 @@ spec:
     - description: Is the build hermetic?
       name: hermetic
       type: string
+    - name: context
+      description: Path to the directory to use as context.
+      type: string
+      default: .
     - description: List of architectures we build RPMs for
       name: build-architectures
       type: array
@@ -79,6 +83,9 @@ spec:
     volumeMounts:
       - mountPath: /var/workdir
         name: workdir
+    env:
+      - name: CONTEXT
+        value: $(params.context)
   steps:
     - name: use-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
@@ -89,7 +96,10 @@ spec:
       image: $(params.script-environment-image)
       script: |
         set -x
-        cd "/var/workdir/source"
+        cd "/var/workdir/source/${CONTEXT}"
+
+        ls -lR
+
         dist-git-client --forked-from https://src.fedoraproject.org/rpms/$(params.package-name) sources
     - name: select-mpc-machines-or-skip
       image: $(params.script-environment-image)
@@ -98,11 +108,15 @@ spec:
       script: |
         #!/bin/bash
         set -x
+        working_dir="/var/workdir/source/${CONTEXT}"
+        cd "${working_dir}"
+
+        ls -lR
 
         if $(params.hermetic); then
-          python3 /usr/local/bin/select_architectures.py "$@" --hermetic --results-file "$(results.skip-mpc-tasks.path)"
+          python3 /usr/local/bin/select_architectures.py "$@" --hermetic --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
         else
-          python3 /usr/local/bin/select_architectures.py "$@" --results-file "$(results.skip-mpc-tasks.path)"
+          python3 /usr/local/bin/select_architectures.py "$@" --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
         fi
     - name: create-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
@@ -110,7 +124,7 @@ spec:
         - create
         - --store
         - $(params.ociStorage)
-        - $(results.dependencies-artifact.path)=/var/workdir/source
+        - $(results.dependencies-artifact.path)=/var/workdir/source/$(params.context)
       env:
         - name: IMAGE_EXPIRES_AFTER
           value: $(params.ociArtifactExpiresAfter)
