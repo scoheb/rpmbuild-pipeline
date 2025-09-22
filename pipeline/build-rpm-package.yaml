@@ -262,6 +262,8 @@ spec:
           value: 14d
         - name: specfile
           value: $(params.specfile)
+        - name: ADDITIONAL_VOLUME_MOUNTS
+          value: ["`pwd`/pulp-cert:/etc/pki/entitlement:Z"]
       taskRef:
         resolver: git
         params:
