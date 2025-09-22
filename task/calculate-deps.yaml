@@ -132,12 +132,29 @@ spec:
             sleep $sleep_time
         done
 
+        ADDITIONAL_VOLUME_MOUNTS=()
+        while [[ $# -gt 0 ]]; do
+          case $1 in
+          --additional-volume-mounts)
+            shift
+            while [[ $# -gt 0 && $1 != --* ]]; do
+              ADDITIONAL_VOLUME_MOUNTS+=("$1")
+              shift
+            done
+            ;;
+          *)
+            echo "unexpected argument: $1" >&2
+            exit 2
+            ;;
+          esac
+        done
+
         success=true
         VOLUME_MOUNTS=(
           -v "$HOMEDIR/source:/source"
           -v "$HOMEDIR/results:/results"
         )
-        for mount in $(params.ADDITIONAL_VOLUME_MOUNTS[*]); do
+        for mount in "${ADDITIONAL_VOLUME_MOUNTS[@]}"; do
           VOLUME_MOUNTS+=(-v "$mount")
         done
 
@@ -172,6 +189,9 @@ spec:
         - mountPath: /ssh
           name: ssh
           readOnly: true
+    - args:
+      - --additional-volume-mounts
+      - $(params.ADDITIONAL_VOLUME_MOUNTS[*])
       computeResources:
         requests:
           ephemeral-storage: 5Gi
