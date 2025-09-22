@@ -183,7 +183,7 @@ spec:
         - mountPath: /ssh
           name: ssh
           readOnly: true
-    - args:
+      args:
       - --additional-volume-mounts
       - $(params.ADDITIONAL_VOLUME_MOUNTS[*])
       computeResources:
