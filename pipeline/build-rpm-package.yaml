@@ -254,6 +254,8 @@ spec:
           value: $(params.ociStorage).calculation-x86_64
         - name: ociArtifactExpiresAfter
           value: 14d
+        - name: ADDITIONAL_VOLUME_MOUNTS
+          value: ["`pwd`/pulp-cert:/etc/pki/entitlement:Z"]
       taskRef:
         resolver: git
         params:
