@@ -255,7 +255,9 @@ spec:
         - name: ociArtifactExpiresAfter
           value: 14d
         - name: ADDITIONAL_VOLUME_MOUNTS
-          value: ["`pwd`/pulp-cert:/etc/pki/entitlement:Z"]
+          value: ["/additional-secret:/additional-secret:Z"]
+        - name: ADDITIONAL_SECRET
+          value: "additional-secret"
       taskRef:
         resolver: git
         params:
