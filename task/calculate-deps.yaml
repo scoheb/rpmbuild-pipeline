@@ -137,7 +137,7 @@ spec:
           -v "$HOMEDIR/source:/source"
           -v "$HOMEDIR/results:/results"
         )
-        for mount in $(params.ADDITIONAL_VOLUME_MOUNTS); do
+        for mount in $(params.ADDITIONAL_VOLUME_MOUNTS[*]); do
           VOLUME_MOUNTS+=(-v "$mount")
         done
 
