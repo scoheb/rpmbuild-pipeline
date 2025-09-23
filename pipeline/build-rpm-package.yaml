@@ -333,6 +333,10 @@ spec:
           value: 14d
         - name: specfile
           value: $(params.specfile)
+        - name: ADDITIONAL_VOLUME_MOUNTS
+          value: ["/additional-secret:/etc/pki/entitlement:Z"]
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -400,6 +404,10 @@ spec:
           value: 14d
         - name: specfile
           value: $(params.specfile)
+        - name: ADDITIONAL_VOLUME_MOUNTS
+          value: ["/additional-secret:/etc/pki/entitlement:Z"]
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -467,6 +475,10 @@ spec:
           value: 14d
         - name: specfile
           value: $(params.specfile)
+        - name: ADDITIONAL_VOLUME_MOUNTS
+          value: ["/additional-secret:/etc/pki/entitlement:Z"]
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
