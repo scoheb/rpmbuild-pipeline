@@ -86,7 +86,8 @@ spec:
           *arm64) arch=aarch64 ;;
         esac
 
-        cat <<EOF > /var/workdir/mock.cfg
+        mkdir -p /var/workdir/config
+        cat <<EOF > /var/workdir/config/mock.cfg
         config_opts['target_arch'] = '$arch'
         config_opts['legal_host_arches'] = ('$arch',)
 
@@ -169,15 +170,18 @@ spec:
         remote_cmd echo "Hello from the other side!"
 
         # Allow mockbuilder (group mock) to read sources, and write results
-        remote_cmd mkdir "$HOMEDIR/results" "$HOMEDIR/source"
+        remote_cmd mkdir "$HOMEDIR/results" "$HOMEDIR/source" "$HOMEDIR/config"
         remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/source"
         remote_cmd podman unshare setfacl -m g:135:rwx -m default:g:135:rwx "$HOMEDIR/results"
+        remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/config"
 
         VOLUME_MOUNTS=(
           -v "$HOMEDIR/source:/source"
           -v "$HOMEDIR/results:/results"
+          -v "$HOMEDIR/config:/config"
         )
         send "$workdir/source/" "$HOMEDIR/source"
+        send "$workdir/config/mock.cfg" "$HOMEDIR/config/mock.cfg"
         if [ -d "/additional-secret" ]; then
           remote_cmd mkdir "$HOMEDIR/additional-secret"
           remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/additional-secret"
@@ -231,7 +235,7 @@ spec:
                               -e KOJI_TARGET="$(params.koji-target)" \
                               "${VOLUME_MOUNTS[@]}" \
                               --init --privileged --rm -ti "$mock_img" \
-            mock -r /var/workdir/mock.cfg \
+            mock -r /config/mock.cfg \
                 --spec /source/$specfile_name \
                 --sources /source --resultdir /results \
                 --calculate-build-dependencies \
