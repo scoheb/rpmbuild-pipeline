@@ -97,7 +97,7 @@ spec:
         # config_opts['chroot_setup_cmd'] = 'install @buildsys-build'
         # NOTE: The buildsys repo we got from hermeto doesn't have the buildsys-build group defined. So
         # we just expand the group into individual packages here.
-        config_opts['chroot_setup_cmd'] = 'install bash bzip2 coreutils cpio diffutils fedora-release-common findutils gawk glibc-minimal-langpack grep gzip info patch redhat-rpm-config rpm-build sed shadow-utils tar unzip util-linux which xz'
+        config_opts['chroot_setup_cmd'] = 'install bash bzip2 coreutils cpio diffutils fedora-release-common findutils gawk glibc-minimal-langpack grep gzip info patch redhat-rpm-config rpm-build sed shadow-utils tar unzip util-linux which xz hello'
 
         config_opts['dist'] = 'rawhide'  # only useful for --resultdir variable subst
         config_opts['extra_chroot_dirs'] = [ '/run/lock', ]
