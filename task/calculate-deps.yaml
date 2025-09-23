@@ -201,7 +201,7 @@ spec:
           # we have already sent over /additional-secret to the mock container
           # at $HOMEDIR/additional-secret
           VOLUME_MOUNTS+=(-v "$HOMEDIR/additional-secret:/etc/pki/entitlement:Z")
-          CLIENT_CERT_ARG="--client-cert-for additional /etc/pki/entitlement/1234.pem /etc/pki/entitlement/1234-key.pem"
+          CLIENT_CERT_ARG="--client-cert-for mtls.internal.console.redhat.com /etc/pki/entitlement/1234.pem /etc/pki/entitlement/1234-key.pem"
         fi
 
         remote_cmd podman run "${VOLUME_MOUNTS[@]}" \
