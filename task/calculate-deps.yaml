@@ -149,7 +149,7 @@ spec:
 
         [rhel-primitives-dev]
         name=rhel-primitives-dev
-        baseurl=https://mtls.internal.console.redhat.com/api/pulp-content/rhel-primitives-dev/x86_64/
+        baseurl=https://mtls.internal.console.redhat.com/api/pulp-content/rhel-primitives-dev/\$basearch/
         enabled=1
         sslverify=0
         gpgcheck=0
@@ -158,7 +158,7 @@ spec:
 
         [fedora]
         name=fedora
-        metalink=https://mirrors.fedoraproject.org/metalink?repo=rawhide&arch=$basearch
+        metalink=https://mirrors.fedoraproject.org/metalink?repo=rawhide&arch=\$basearch
         enabled=1
         cost=2000
         """
