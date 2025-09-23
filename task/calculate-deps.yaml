@@ -38,10 +38,6 @@ spec:
       name: ssh-wait-seconds
       type: string
       default: "300"
-    - default: []
-      description: Additional volume mounts needed for the build
-      name: ADDITIONAL_VOLUME_MOUNTS
-      type: array
     - default: does-not-exist
       description: Name of a secret which will be made available to the mock command
       name: ADDITIONAL_SECRET
@@ -124,7 +120,17 @@ spec:
         remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/source"
         remote_cmd podman unshare setfacl -m g:135:rwx -m default:g:135:rwx "$HOMEDIR/results"
 
+        VOLUME_MOUNTS=(
+          -v "$HOMEDIR/source:/source"
+          -v "$HOMEDIR/results:/results"
+        )
         send "$workdir/source/" "$HOMEDIR/source"
+        if [ -d "/additional-secret" ]; then
+          remote_cmd mkdir "$HOMEDIR/additional-secret"
+          remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/additional-secret"
+          send "/additional-secret/" "$HOMEDIR/additional-secret"
+          VOLUME_MOUNTS+=(-v "$HOMEDIR/additional-secret:/etc/pki/entitlement:Z")
+        fi
 
         mock_img=$(params.script-environment-image)
         # podman pull has --retry=3 as a default, nevertheless it works only for download of blobs,
@@ -134,32 +140,6 @@ spec:
             sleep_time=$((i ** 2))
             echo "Retrying in $sleep_time seconds."
             sleep $sleep_time
-        done
-
-        ADDITIONAL_VOLUME_MOUNTS=()
-        while [[ $# -gt 0 ]]; do
-          case $1 in
-          --additional-volume-mounts)
-            shift
-            while [[ $# -gt 0 && $1 != --* ]]; do
-              ADDITIONAL_VOLUME_MOUNTS+=("$1")
-              shift
-            done
-            ;;
-          *)
-            echo "unexpected argument: $1" >&2
-            exit 2
-            ;;
-          esac
-        done
-
-        success=true
-        VOLUME_MOUNTS=(
-          -v "$HOMEDIR/source:/source"
-          -v "$HOMEDIR/results:/results"
-        )
-        for mount in "${ADDITIONAL_VOLUME_MOUNTS[@]}"; do
-          VOLUME_MOUNTS+=(-v "$mount")
         done
 
         remote_cmd podman run -u mockbuilder \
@@ -195,9 +175,6 @@ spec:
           readOnly: true
         - mountPath: /additional-secret
           name: additional-secret
-      args:
-      - --additional-volume-mounts
-      - $(params.ADDITIONAL_VOLUME_MOUNTS[*])
       computeResources:
         requests:
           ephemeral-storage: 5Gi

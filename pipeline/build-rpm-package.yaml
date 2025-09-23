@@ -254,8 +254,6 @@ spec:
           value: $(params.ociStorage).calculation-x86_64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_VOLUME_MOUNTS
-          value: ["/additional-secret:/etc/pki/entitlement:Z"]
         - name: ADDITIONAL_SECRET
           value: "rhel-primitives-pulp-secret"
       taskRef:
@@ -321,8 +319,6 @@ spec:
           value: $(params.ociStorage).calculation-aarch64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_VOLUME_MOUNTS
-          value: ["/additional-secret:/etc/pki/entitlement:Z"]
         - name: ADDITIONAL_SECRET
           value: "rhel-primitives-pulp-secret"
       taskRef:
@@ -388,8 +384,6 @@ spec:
           value: $(params.ociStorage).calculation-s390x
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_VOLUME_MOUNTS
-          value: ["/additional-secret:/etc/pki/entitlement:Z"]
         - name: ADDITIONAL_SECRET
           value: "rhel-primitives-pulp-secret"
       taskRef:
@@ -455,8 +449,6 @@ spec:
           value: $(params.ociStorage).calculation-ppc64le
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_VOLUME_MOUNTS
-          value: ["/additional-secret:/etc/pki/entitlement:Z"]
         - name: ADDITIONAL_SECRET
           value: "rhel-primitives-pulp-secret"
       taskRef:
