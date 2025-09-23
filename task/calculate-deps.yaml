@@ -139,6 +139,8 @@ spec:
         name=rhel-primitives-dev
         baseurl=https://mtls.internal.console.redhat.com/api/pulp-content/rhel-primitives-dev/\$basearch/
         enabled=1
+        priority=1
+        cost=100
         sslverify=0
         gpgcheck=0
         sslclientcert=/etc/pki/entitlement/1234.pem
@@ -148,7 +150,7 @@ spec:
         name=fedora
         metalink=https://mirrors.fedoraproject.org/metalink?repo=rawhide&arch=\$basearch
         enabled=1
-        excludepkgs=hello
+        priority=100
         cost=2000
         """
         EOF
