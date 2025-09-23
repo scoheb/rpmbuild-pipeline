@@ -152,6 +152,8 @@ spec:
         """
         EOF
 
+        cat /var/workdir/config/mock.cfg
+
         chmod 0400 ~/.ssh/id_rsa
         export SSH_HOST=$(cat /ssh/host)
         export HOMEDIR=$(cat /ssh/user-dir)
