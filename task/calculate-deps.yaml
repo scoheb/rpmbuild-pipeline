@@ -98,7 +98,7 @@ spec:
           *arm64) arch=aarch64 ;;
         esac
 
-        cat <<< EOF > /var/workdir/mock.cfg
+        cat <<EOF > /var/workdir/mock.cfg
         config_opts['target_arch'] = '$arch'
         config_opts['legal_host_arches'] = ('$arch',)
 
