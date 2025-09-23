@@ -29,7 +29,7 @@ spec:
         set -ex
         set -o pipefail
 
-        CONFIG="$(cat <<EOF
+        cat <<EOF > /tmp/mock.cfg
         config_opts['target_arch'] = '$arch'
         config_opts['legal_host_arches'] = ('$arch',)
 
@@ -96,6 +96,5 @@ spec:
         cost=2000
         """
         EOF
-        )"
 
-        echo "$CONFIG" | tee "$(results.mock-config-file.path)"
+        cat /tmp/mock.cfg | tee "$(results.mock-config-file.path)"
