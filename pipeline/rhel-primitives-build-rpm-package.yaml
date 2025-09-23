@@ -234,9 +234,26 @@ spec:
           value: $(params.hermetic)
         - name: build-architectures
           value: ["$(params.build-architectures[*])"]
-    - name: calculate-deps-x86-64
+    - name: generate-mock-config-x86-64
       runAfter:
         - get-rpm-sources
+      params:
+        - name: arch
+          value: x86_64
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
+    - name: calculate-deps-x86-64
+      runAfter:
+        - generate-mock-config-x86-64
       params:
         - name: package-name
           value: $(params.package-name)
@@ -244,6 +261,8 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-x86-64.results.mock-config-file)
         - name: PLATFORM
           value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-x86_64)
         - name: script-environment-image
@@ -254,6 +273,8 @@ spec:
           value: $(params.ociStorage).calculation-x86_64
         - name: ociArtifactExpiresAfter
           value: 14d
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -297,9 +318,26 @@ spec:
             value: $(params.self-ref-revision)
           - name: pathInRepo
             value: task/rpmbuild.yaml
-    - name: calculate-deps-aarch64
+    - name: generate-mock-config-aarch64
       runAfter:
         - get-rpm-sources
+      params:
+        - name: arch
+          value: aarch64
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
+    - name: calculate-deps-aarch64
+      runAfter:
+        - generate-mock-config-aarch64
       params:
         - name: package-name
           value: $(params.package-name)
@@ -307,6 +345,8 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-aarch64.results.mock-config-file)
         - name: PLATFORM
           value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-aarch64)
         - name: script-environment-image
@@ -317,6 +357,8 @@ spec:
           value: $(params.ociStorage).calculation-aarch64
         - name: ociArtifactExpiresAfter
           value: 14d
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -360,9 +402,26 @@ spec:
             value: $(params.self-ref-revision)
           - name: pathInRepo
             value: task/rpmbuild.yaml
-    - name: calculate-deps-s390x
+    - name: generate-mock-config-s390x
       runAfter:
         - get-rpm-sources
+      params:
+        - name: arch
+          value: s390x
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
+    - name: calculate-deps-s390x
+      runAfter:
+        - generate-mock-config-s390x
       params:
         - name: package-name
           value: $(params.package-name)
@@ -370,6 +429,8 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-s390x.results.mock-config-file)
         - name: PLATFORM
           value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-s390x)
         - name: script-environment-image
@@ -380,6 +441,8 @@ spec:
           value: $(params.ociStorage).calculation-s390x
         - name: ociArtifactExpiresAfter
           value: 14d
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
@@ -423,9 +486,26 @@ spec:
             value: $(params.self-ref-revision)
           - name: pathInRepo
             value: task/rpmbuild.yaml
-    - name: calculate-deps-ppc64le
+    - name: generate-mock-config-ppc64le
       runAfter:
         - get-rpm-sources
+      params:
+        - name: arch
+          value: ppc64le
+        - name: script-environment-image
+          value: $(params.script-environment-image)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: $(params.self-ref-url)
+          - name: revision
+            value: $(params.self-ref-revision)
+          - name: pathInRepo
+            value: task/generate-mock-config.yaml
+    - name: calculate-deps-ppc64le
+      runAfter:
+        - generate-mock-config-ppc64le
       params:
         - name: package-name
           value: $(params.package-name)
@@ -433,6 +513,8 @@ spec:
           value: $(params.target-branch)
         - name: koji-target
           value: $(params.koji-target)
+        - name: mock-config
+          value: $(tasks.generate-mock-config-ppc64le.results.mock-config-file)
         - name: PLATFORM
           value: $(tasks.get-rpm-sources.results.skip-mpc-tasks.deps-ppc64le)
         - name: script-environment-image
@@ -443,6 +525,8 @@ spec:
           value: $(params.ociStorage).calculation-ppc64le
         - name: ociArtifactExpiresAfter
           value: 14d
+        - name: ADDITIONAL_SECRET
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
