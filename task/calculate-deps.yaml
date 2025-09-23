@@ -133,7 +133,6 @@ spec:
         ROOT_CONFIG="fedora-rawhide-${arch}"
 
         echo "Mock config env content: ${MOCK_CONFIG_CONTENT}"
-        echo "Mock config param: $(params.mock-config)"
 
         if [ -n "${MOCK_CONFIG_CONTENT}" ]; then
           echo "${MOCK_CONFIG_CONTENT}" > "$workdir/config/mock.cfg"
