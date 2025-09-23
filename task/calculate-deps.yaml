@@ -119,10 +119,8 @@ spec:
         )
 
         ROOT_CONFIG="fedora-rawhide-${arch}"
-
-        echo "Mock config env content: ${MOCK_CONFIG_CONTENT}"
-
         if [ -n "${MOCK_CONFIG_CONTENT}" ]; then
+          mkdir -p "$workdir/config"
           echo "${MOCK_CONFIG_CONTENT}" > "$workdir/config/mock.cfg"
           VOLUME_MOUNTS+=(-v "$HOMEDIR/config:/config:Z")
           send "$workdir/config/mock.cfg" "$HOMEDIR/config/mock.cfg"
