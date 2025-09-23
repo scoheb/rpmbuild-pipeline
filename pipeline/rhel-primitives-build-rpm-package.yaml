@@ -273,7 +273,7 @@ spec:
           value: $(params.ociStorage).calculation-x86_64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_SECRET
+        - name: additional-secret
           value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
@@ -357,7 +357,7 @@ spec:
           value: $(params.ociStorage).calculation-aarch64
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_SECRET
+        - name: additional-secret
           value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
@@ -441,7 +441,7 @@ spec:
           value: $(params.ociStorage).calculation-s390x
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_SECRET
+        - name: additional-secret
           value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
@@ -525,7 +525,7 @@ spec:
           value: $(params.ociStorage).calculation-ppc64le
         - name: ociArtifactExpiresAfter
           value: 14d
-        - name: ADDITIONAL_SECRET
+        - name: additional-secret
           value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
