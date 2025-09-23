@@ -255,9 +255,9 @@ spec:
         - name: ociArtifactExpiresAfter
           value: 14d
         - name: ADDITIONAL_VOLUME_MOUNTS
-          value: ["/additional-secret:/additional-secret:Z"]
+          value: ["/additional-secret:/etc/pki/entitlement:Z"]
         - name: ADDITIONAL_SECRET
-          value: "additional-secret"
+          value: "rhel-primitives-pulp-secret"
       taskRef:
         resolver: git
         params:
