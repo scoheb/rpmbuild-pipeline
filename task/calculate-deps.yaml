@@ -160,6 +160,7 @@ spec:
         name=fedora
         metalink=https://mirrors.fedoraproject.org/metalink?repo=rawhide&arch=\$basearch
         enabled=1
+        excludepkgs=hello
         cost=2000
         """
         EOF
