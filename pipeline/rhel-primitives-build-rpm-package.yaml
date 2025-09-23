@@ -92,7 +92,7 @@ spec:
         configuration, dist-git-client, koji-client, and other RPM-build related
         tooling.
       name: script-environment-image
-      default: quay.io/scoheb/script-environment-image:latest
+      default: quay.io/scoheb/script-environment-image:oldertag ##quay.io/scoheb/script-environment-image:latest
       type: string
     - name: ociStorage
       description: |
