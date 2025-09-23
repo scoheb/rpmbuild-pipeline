@@ -192,10 +192,16 @@ spec:
         remote_cmd "tar xvfO '$HOMEDIR'/results/chroot_scan.tar.gz 2>&1 | cat"
         $success
 
+        CLIENT_CERT_ARG=""
+        if [ -d "/additional-secret" ]; then
+          CLIENT_CERT_ARG="--client-cert-for additional /etc/pki/entitlement/1234.pem /etc/pki/entitlement/1234-key.pem"
+        fi
+
         remote_cmd podman run -v "$HOMEDIR/results:/results" \
                               --privileged --rm -ti "$mock_img" \
             mock-hermetic-repo \
             --lockfile /results/buildroot_lock.json \
+            $CLIENT_CERT_ARG \
             --output-repo /results/buildroot_repo
 
         resultdir=$workdir/results/$arch/results
