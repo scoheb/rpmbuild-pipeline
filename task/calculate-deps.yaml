@@ -192,12 +192,20 @@ spec:
         remote_cmd "tar xvfO '$HOMEDIR'/results/chroot_scan.tar.gz 2>&1 | cat"
         $success
 
+        VOLUME_MOUNTS=(
+          -v "$HOMEDIR/results:/results"
+        )
+
         CLIENT_CERT_ARG=""
         if [ -d "/additional-secret" ]; then
+          remote_cmd mkdir "$HOMEDIR/additional-secret"
+          remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/additional-secret"
+          send "/additional-secret/" "$HOMEDIR/additional-secret"
+          VOLUME_MOUNTS+=(-v "$HOMEDIR/additional-secret:/etc/pki/entitlement:Z")
           CLIENT_CERT_ARG="--client-cert-for additional /etc/pki/entitlement/1234.pem /etc/pki/entitlement/1234-key.pem"
         fi
 
-        remote_cmd podman run -v "$HOMEDIR/results:/results" \
+        remote_cmd podman run "${VOLUME_MOUNTS[@]}" \
                               --privileged --rm -ti "$mock_img" \
             mock-hermetic-repo \
             --lockfile /results/buildroot_lock.json \
