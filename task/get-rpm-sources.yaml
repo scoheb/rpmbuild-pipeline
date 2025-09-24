@@ -124,7 +124,7 @@ spec:
         - create
         - --store
         - $(params.ociStorage)
-        - $(results.dependencies-artifact.path)=/var/workdir/source/${params.context}
+        - $(results.dependencies-artifact.path)=/var/workdir/source/$(params.context)
       env:
         - name: IMAGE_EXPIRES_AFTER
           value: $(params.ociArtifactExpiresAfter)
