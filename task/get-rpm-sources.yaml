@@ -91,6 +91,8 @@ spec:
         set -x
         cd "/var/workdir/source"
 
+        ls -lR
+
         if [ ! -s sources ]; then
           echo "The file 'sources' is empty or does not exist."
           exit 0
