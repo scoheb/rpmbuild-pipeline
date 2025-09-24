@@ -90,7 +90,15 @@ spec:
       script: |
         set -x
         cd "/var/workdir/source"
-        dist-git-client --forked-from https://src.fedoraproject.org/rpms/$(params.package-name) sources
+        if [ -f sources ] && [ ! -s sources ]; then
+          echo "File 'sources' exists and is empty."
+          exit 0
+        elif [ -f sources ]; then
+          dist-git-client --forked-from https://src.fedoraproject.org/rpms/$(params.package-name) sources
+        else
+          echo "Error: File 'sources' does not exist."
+          exit 1
+        fi
     - name: select-mpc-machines-or-skip
       image: $(params.script-environment-image)
       args:
