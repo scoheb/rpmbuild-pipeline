@@ -67,6 +67,9 @@ spec:
       script: |
         #!/bin/bash
         set -ex
+
+        ls -lR /var/workdir/source
+
         if test "$(params.PLATFORM)" = localhost; then
           # do nothing (architecture not selected)
           exit 0
