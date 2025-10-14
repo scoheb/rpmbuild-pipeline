@@ -43,10 +43,6 @@ spec:
         Name of specfile when specfile doesn't have the same prefix name as package name.
         Default is null and package-name.spec is used.
       type: string
-    - default: does-not-exist
-      description: Name of a secret which will be made available to the mock command
-      name: additional-secret
-      type: string
   results:
     - name: calculation-artifact
       description: The Trusted Artifact URI pointing to the artifact with the result of the deps calculation.
@@ -66,9 +62,6 @@ spec:
       script: |
         #!/bin/bash
         set -ex
-
-        ls -lR /var/workdir/source
-
         if test "$(params.PLATFORM)" = localhost; then
           # do nothing (architecture not selected)
           exit 0
@@ -130,12 +123,6 @@ spec:
         fi
 
         send "$workdir/source/" "$HOMEDIR/source"
-        if [ -d "/additional-secret" ]; then
-          remote_cmd mkdir "$HOMEDIR/additional-secret"
-          remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/additional-secret"
-          send "/additional-secret/" "$HOMEDIR/additional-secret"
-          VOLUME_MOUNTS+=(-v "$HOMEDIR/additional-secret:/etc/pki/entitlement:Z")
-        fi
 
         mock_img=$(params.script-environment-image)
         # podman pull has --retry=3 as a default, nevertheless it works only for download of blobs,
@@ -154,6 +141,7 @@ spec:
           specfile_name="${specfile_prefix}.spec"
         fi
 
+        success=true
         remote_cmd podman run -u mockbuilder \
                               -e KOJI_TARGET="$(params.koji-target)" \
                               "${VOLUME_MOUNTS[@]}" \
@@ -172,20 +160,10 @@ spec:
         VOLUME_MOUNTS=(
           -v "$HOMEDIR/results:/results"
         )
-
-        CLIENT_CERT_ARG=""
-        if [ -d "/additional-secret" ]; then
-          # we have already sent over /additional-secret to the mock container
-          # at $HOMEDIR/additional-secret
-          VOLUME_MOUNTS+=(-v "$HOMEDIR/additional-secret:/etc/pki/entitlement:Z")
-          CLIENT_CERT_ARG="--client-cert-for mtls.internal.console.redhat.com /etc/pki/entitlement/1234.pem /etc/pki/entitlement/1234-key.pem"
-        fi
-
         remote_cmd podman run "${VOLUME_MOUNTS[@]}" \
                               --privileged --rm -ti "$mock_img" \
             mock-hermetic-repo \
             --lockfile /results/buildroot_lock.json \
-            $CLIENT_CERT_ARG \
             --output-repo /results/buildroot_repo
 
         resultdir=$workdir/results/$arch/results
@@ -198,16 +176,12 @@ spec:
         - mountPath: /ssh
           name: ssh
           readOnly: true
-        - mountPath: /additional-secret
-          name: additional-secret
       computeResources:
         requests:
           ephemeral-storage: 5Gi
       env:
       - name: MOCK_CONFIG_CONTENT
         value: $(params.mock-config)
-      - name: additional-secret
-        value: $(params.additional-secret)
     - name: create-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
       args:
@@ -222,7 +196,3 @@ spec:
         secretName: multi-platform-ssh-$(context.taskRun.name)
     - name: workdir
       emptyDir: {}
-    - name: additional-secret
-      secret:
-        optional: true
-        secretName: $(params.additional-secret)

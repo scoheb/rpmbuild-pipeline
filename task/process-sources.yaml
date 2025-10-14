@@ -123,8 +123,6 @@ spec:
         working_dir="/var/workdir/source"
         cd "${working_dir}"
 
-        ls -lR
-
         if $(params.hermetic); then
           python3 /usr/local/bin/select_architectures.py "$@" --hermetic --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
         else
