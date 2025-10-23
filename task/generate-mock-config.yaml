@@ -53,7 +53,7 @@ spec:
 
         config_opts['description'] = 'Fedora Rawhide'
 
-        config_opts['redhat_subscription_required'] = True
+        config_opts['redhat_subscription_required'] = False
 
         config_opts['dnf.conf'] = """
         [main]
