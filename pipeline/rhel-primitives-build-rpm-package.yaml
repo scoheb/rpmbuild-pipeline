@@ -211,7 +211,7 @@ spec:
       workspaces:
         - name: basic-auth
           workspace: git-auth
-    - name: get-rpm-sources
+    - name: process-sources
       retries: 3
       taskRef:
         resolver: git
