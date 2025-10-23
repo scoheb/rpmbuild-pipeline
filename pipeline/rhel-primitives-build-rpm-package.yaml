@@ -241,8 +241,6 @@ spec:
           value: $(params.script-environment-image)
         - name: hermetic
           value: $(params.hermetic)
-        - name: context
-          value: $(params.path-context)
         - name: build-architectures
           value: ["$(params.build-architectures[*])"]
     - name: generate-mock-config-x86-64
