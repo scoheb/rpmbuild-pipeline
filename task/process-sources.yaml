@@ -114,6 +114,8 @@ spec:
         dist-git-client --forked-from https://src.fedoraproject.org/rpms/$(params.package-name) sources
         # Make sure we use norpm: https://github.com/fedora-infra/rpmautospec/pull/319
         rpmautospec process-distgit "$specfile_name" "$specfile_name"
+
+        cd "/var/workdir/source"
         git diff
         # We remove the .git repository here to ensure that historical code does
         # not affect the output of the build.  This is critical because the user
