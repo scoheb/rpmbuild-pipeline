@@ -98,7 +98,6 @@ spec:
         tooling.
       name: script-environment-image
       default: quay.io/redhat-user-workloads/rpm-build-pipeline-tenant/environment:latest@sha256:90b1289849de3fb8b6435225f4409d2ae288acdcc0e38a5ff5fb563fef35c620
-      #default: quay.io/scoheb/script-environment-image:mock-hermetic-repo-client-cert-patch
       type: string
     - name: ociStorage
       description: |
