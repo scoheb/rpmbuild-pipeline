@@ -77,9 +77,9 @@ spec:
 
         # repos
 
-        [rhel-primitives]
-        name=rhel-primitives
-        baseurl=https://console.redhat.com/api/pulp-content/public-rhel-primitives/$arch/
+        [hummingbird]
+        name=hummingbird
+        baseurl=https://console.redhat.com/api/pulp-content/public-hummingbird/$arch/
         enabled=1
         sslverify=0
         gpgcheck=0
