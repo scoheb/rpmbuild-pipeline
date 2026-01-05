@@ -131,7 +131,6 @@ spec:
         # Configure curl's header until https://github.com/release-engineering/dist-git/issues/88 is fixed
         CURL_HOME=$(mktemp -d)
         echo 'header = "Accept-Encoding: identity"' > $CURL_HOME/.curlrc
-        export CURL_HOME
 
         # Build dist-git-client arguments
         dgc_args=""
@@ -144,7 +143,7 @@ spec:
         forked_from_url="${forked_from_url%/}/"
         dgc_args="$dgc_args --forked-from ${forked_from_url}$(params.package-name)"
 
-        dist-git-client $dgc_args sources
+        CURL_HOME="$CURL_HOME" dist-git-client $dgc_args sources
         # Make sure we use norpm: https://github.com/fedora-infra/rpmautospec/pull/319
         if [ "${MONOREPO_SUBDIR:-.}" = "." ]; then
           rpmautospec process-distgit "$specfile_name" "$specfile_name"
