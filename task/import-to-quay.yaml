@@ -156,14 +156,12 @@ spec:
         ( # limit the scope of nullglob
           shopt -s nullglob
           for tarball in *.tar* *.tg* ; do
-            case "$tarball" in
-              *.asc|*.sig|*.target)
-                echo "Skipping non-tar file: $tarball"
-                continue
-                ;;
-            esac
-            echo "Processing tar file: $tarball"
-            tar -xf "$tarball"
+            if tar -tf "$tarball" &>/dev/null ; then
+              echo "Processing tar file: $tarball"
+              tar -xf "$tarball"
+            else
+              echo "Skipping non-archive file: $tarball"
+            fi
           done
         )
         #unzip ./*.zip &>/dev/null # missing in mock image
