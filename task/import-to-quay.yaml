@@ -157,7 +157,7 @@ spec:
           shopt -s nullglob
           for tarball in *.tar* *.tg* ; do
             case "$tarball" in
-              *.asc|*.sig)
+              *.asc|*.sig|*.target)
                 echo "Skipping non-tar file: $tarball"
                 continue
                 ;;
