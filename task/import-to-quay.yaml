@@ -113,7 +113,7 @@ spec:
         NVR=$(<nvr.log)
 
         # Normalize NVR for OCI compatibility (tildes are not allowed in tags)
-        NVR_NORMALIZED="${NVR//\~/-}"
+        NVR_NORMALIZED="${NVR//[~+]/-}"
 
         IMAGE_URL="$(params.ociStorage).nvr-$NVR_NORMALIZED"
 
