@@ -1,0 +1,86 @@
+---
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
+          $CI_MERGE_REQUEST_EVENT_TYPE != 'merge_train'
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
+          $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  - build
+  - deploy
+
+default:
+  tags: [small-runner]
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - unknown_failure
+      - api_failure
+      - job_execution_timeout
+
+.rules:
+  mr: &mr
+    if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
+        $CI_MERGE_REQUEST_EVENT_TYPE != 'merge_train'
+  mr_train: &mr_train
+    if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
+        $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+  mr_manual:
+    if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    when: manual
+    allow_failure: true
+  main: &main
+    if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+.bundle-push:
+  image: ghcr.io/tektoncd/plumbing/tkn:latest
+  variables:
+    TASK_BUNDLE_TAG: git-${CI_COMMIT_SHA}
+    PIPELINE_BUNDLE_TAG: latest
+  script:
+    - |
+      sed -i "s|:__TASK_BUNDLE_TAG__|:${TASK_BUNDLE_TAG}|g" pipeline/build-rpm-package.yaml
+
+      for file in task/*.yaml; do
+        name="${file##*/}"
+        name="${name%.yaml}"
+        tkn bundle push --remote-username $QUAY_USERNAME --remote-password $QUAY_PASSWORD \
+          ${BUNDLE_EXTRA_ARGS:-} -f "$file" "quay.io/hummingbird-ci/rpmbuild-task-${name}:${TASK_BUNDLE_TAG}"
+      done
+
+      tkn bundle push --remote-username $QUAY_USERNAME --remote-password $QUAY_PASSWORD \
+        ${BUNDLE_EXTRA_ARGS:-} -f pipeline/build-rpm-package.yaml \
+        "quay.io/hummingbird-ci/rpmbuild-pipeline:${PIPELINE_BUNDLE_TAG}"
+
+bundles:validate:
+  image: quay.io/hummingbird-ci/gitlab-ci:latest
+  stage: build
+  script:
+    - |
+      for file in task/*.yaml pipeline/*.yaml; do
+        echo "Validating $file..."
+        yq eval '.' "$file" > /dev/null
+      done
+  rules:
+    - !reference [.rules, mr_train]
+
+bundles:test:
+  extends: .bundle-push
+  stage: build
+  variables:
+    TASK_BUNDLE_TAG: pipeline-${CI_PIPELINE_ID}
+    PIPELINE_BUNDLE_TAG: pipeline-${CI_PIPELINE_ID}
+    BUNDLE_EXTRA_ARGS: "--label quay.expires-after=7d"
+  rules:
+    - !reference [.rules, mr]
+
+bundles:release:
+  extends: .bundle-push
+  stage: deploy
+  rules:
+    - !reference [.rules, mr_manual]
+    - !reference [.rules, main]
