@@ -38,9 +38,6 @@ default:
 
 .bundle-push:
   image: ghcr.io/tektoncd/plumbing/tkn:latest
-  variables:
-    TASK_BUNDLE_TAG: git-${CI_COMMIT_SHA}
-    PIPELINE_BUNDLE_TAG: latest
   script:
     - |
       sed -i "s|:__TASK_BUNDLE_TAG__|:${TASK_BUNDLE_TAG}|g" pipeline/build-rpm-package.yaml
@@ -81,6 +78,15 @@ bundles:test:
 bundles:release:
   extends: .bundle-push
   stage: deploy
+  variables:
+    TASK_BUNDLE_TAG: git-${CI_COMMIT_SHA}
+    PIPELINE_BUNDLE_TAG: git-${CI_COMMIT_SHA}
+  script:
+    - !reference [.bundle-push, script]
+    - |
+      tkn bundle push --remote-username $QUAY_USERNAME --remote-password $QUAY_PASSWORD \
+        -f pipeline/build-rpm-package.yaml \
+        "quay.io/hummingbird-ci/rpmbuild-pipeline:latest"
   rules:
     - !reference [.rules, mr_manual]
     - !reference [.rules, main]
