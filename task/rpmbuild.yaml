@@ -145,7 +145,6 @@ spec:
         podman_params=(
             -u mockbuilder
             --pids-limit=$PID_LIMIT_CONST
-            --ulimit fsize=-1:-1
             -v "$HOMEDIR/source:/source"
             -v "$HOMEDIR/results:/results"
             -v "$HOMEDIR/var_lib_mock:/var/lib/mock"
@@ -161,6 +160,8 @@ spec:
         fi
 
         success=true
+        # Resource limits cause issues for some RPM builds, so display debug information for future analysis.
+        remote_cmd ulimit -a
         if "$(params.hermetic)"; then
           # Give mockbuilder rights to consume buildroot.
           remote_cmd mkdir "$HOMEDIR/buildroot"
