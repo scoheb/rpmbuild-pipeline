@@ -8,6 +8,7 @@ workflow:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 stages:
+  - check
   - build
   - deploy
 
@@ -36,6 +37,17 @@ default:
   main: &main
     if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+upstream:check:
+  image: quay.io/hummingbird-ci/gitlab-ci:latest
+  stage: check
+  before_script:
+    - git submodule update --init
+  script:
+    - make -C .hummingbird check
+  rules:
+    - !reference [.rules, mr]
+    - !reference [.rules, mr_train]
+
 .bundle-push:
   image: ghcr.io/tektoncd/plumbing/tkn:latest
   script:
@@ -55,7 +67,7 @@ default:
 
 bundles:validate:
   image: quay.io/hummingbird-ci/gitlab-ci:latest
-  stage: build
+  stage: check
   script:
     - |
       for file in task/*.yaml pipeline/*.yaml; do

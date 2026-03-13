@@ -42,7 +42,15 @@ spec:
     - description: List of platform overrides (MPLs)
       name: build-platforms
       type: array
-      default: []
+      default:
+        - linux/arm64
+        - linux/ppc64le
+        - linux/s390x
+        - linux/amd64
+    - description: Target distribution. The pipeline expands spec file using macros from the target distribution. Typically specified as ID-VERSION_ID (see /etc/os-release), e.g., rhel-11
+      name: target-distribution
+      type: string
+      default: 'fedora-rawhide'
     - description: |
         URL prefix of the upstream dist-git repository for lookaside cache resolution.
         The package name will be appended to this prefix.
@@ -118,8 +126,7 @@ spec:
       image: $(params.script-environment-image)
       script: |
         set -ex
-        source_root="/var/workdir/source"
-        cd "${source_root}/${MONOREPO_SUBDIR}"
+        cd "/var/workdir/source/${MONOREPO_SUBDIR}"
 
         if test "$(params.specfile)" != "null" ; then
           specfile_name=$(params.specfile)
@@ -135,8 +142,7 @@ spec:
         # Build dist-git-client arguments
         dgc_args=""
         if [ -n "$(params.dist-git-client-configdir)" ]; then
-          # Configdir is relative to source root, not current working directory
-          dgc_args="$dgc_args --configdir ${source_root}/$(params.dist-git-client-configdir)"
+          dgc_args="$dgc_args --configdir /var/workdir/source/$(params.dist-git-client-configdir)"
         fi
         # Ensure forked-from URL has trailing slash before appending package name
         forked_from_url="$(params.forked-from)"
@@ -147,11 +153,17 @@ spec:
         # Make sure we use norpm: https://github.com/fedora-infra/rpmautospec/pull/319
         if [ "${MONOREPO_SUBDIR:-.}" = "." ]; then
           rpmautospec process-distgit "$specfile_name" "$specfile_name"
+
+          # Generate the patch-git-generated-log.txt and
+          # patch-git-generated-commit.txt files.  These are harmless,
+          # metadata-only files; although currently only the Glibc build uses
+          # them, we generate them by default.
+          patch-git-prepare.sh
         else
           echo "'rpmautospec process-distgit' is not supported for monorepos"
         fi
 
-        cd "${source_root}"
+        cd "/var/workdir/source"
         git diff
 
         # We remove the .git repository here to ensure that historical code does
@@ -167,14 +179,15 @@ spec:
         - "$(params.build-platforms[*])"
       script: |
         #!/bin/bash
+        export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") '
         set -x
         working_dir="/var/workdir/source/${MONOREPO_SUBDIR}"
         cd "${working_dir}"
 
         if $(params.hermetic); then
-          python3 /usr/local/bin/select_architectures.py "$@" --hermetic --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
+          python3 /usr/local/bin/select_architectures.py "$@" --target-distribution "$(params.target-distribution)" --hermetic --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
         else
-          python3 /usr/local/bin/select_architectures.py "$@" --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
+          python3 /usr/local/bin/select_architectures.py "$@" --target-distribution "$(params.target-distribution)" --results-file "$(results.skip-mpc-tasks.path)" --workdir "${working_dir}"
         fi
     - name: create-trusted-artifact
       image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d

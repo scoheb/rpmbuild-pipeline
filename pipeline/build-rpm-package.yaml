@@ -36,7 +36,7 @@ spec:
           - name: name
             value: show-sbom
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:beb0616db051952b4b861dd8c3e00fa1c0eccbd926feddf71194d3bb3ace9ce7
+            value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:e2c1b4eac642f32e91f3bc5d3cb48c5c70888aaf45c3650d9ea34573de7a7fd5
           - name: kind
             value: task
         resolver: bundles
@@ -82,13 +82,17 @@ spec:
     - name: build-platforms
       description: List of platform overrides (MPLs).
       type: array
-      default: []
+      default:
+        - linux/arm64
+        - linux/ppc64le
+        - linux/s390x
+        - linux/amd64
     - description: |
         Multi-arch container image that ships Mock + the needed Mock
         configuration, dist-git-client, koji-client, and other RPM-build related
         tooling.
       name: script-environment-image
-      default: quay.io/redhat-user-workloads/rpm-build-pipeline-tenant/environment:latest@sha256:f4f407801167cbd498ced653a5891160de0c5f424d3591c41fc9bd4bcf2be9bc
+      default: quay.io/redhat-user-workloads/rpm-build-pipeline-tenant/environment:latest@sha256:b0629c88b418d0d831a606e0782ff2a5cdaca0f40ac16b7fce373dbc9c29e68e
       type: string
     - name: ociStorage
       description: |
@@ -130,6 +134,10 @@ spec:
       default: 'false'
       description: Enable cache proxy configuration
       type: string
+    - name: target-distribution
+      default: 'fedora-rawhide'
+      description: Target distribution. The pipeline expands spec file using macros from the target distribution. Typically specified as ID-VERSION_ID (see /etc/os-release), e.g., rhel-11
+      type: string
     - name: forked-from
       description: |
         URL prefix of the upstream dist-git repository for lookaside cache resolution.
@@ -143,10 +151,6 @@ spec:
         Passed to dist-git-client via --configdir option.
       type: string
       default: ""
-    - name: syft-image
-      description: Image to use for running syft
-      type: string
-      default: registry.access.redhat.com/rh-syft-tech-preview/syft-rhel9:1.29.0@sha256:dc0da6b4448428e625271b542cc029ab03de92f75ea50d6d63b1d088d20bbd28
   results:
     - description: ""
       name: CHAINS-GIT_URL
@@ -201,7 +205,7 @@ spec:
           - name: name
             value: init
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-init:0.2@sha256:b349d24cb896573695802d6913d311640b44675ec082b3ad167721946a6a0a71
+            value: quay.io/konflux-ci/tekton-catalog/task-init:0.2@sha256:ebf06778aeacbbeb081f9231eafbdfdb8e380ad04e211d7ed80ae9101e37fd82
           - name: kind
             value: task
         resolver: bundles
@@ -225,7 +229,7 @@ spec:
           - name: name
             value: git-clone-oci-ta
           - name: bundle
-            value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:0a89e1a6304076525e9766f63a4cd006763d21d5aca6863281fc427537a23c6f
+            value: quay.io/konflux-ci/tekton-catalog/task-git-clone-oci-ta:0.1@sha256:306b69e6db435ad4a7cf258b6219d9b998eb37da44f5e9ac882ac86a08109154
           - name: kind
             value: task
         resolver: bundles
@@ -266,6 +270,8 @@ spec:
           value: ["$(params.build-architectures[*])"]
         - name: build-platforms
           value: ["$(params.build-platforms[*])"]
+        - name: target-distribution
+          value: $(params.target-distribution)
         - name: forked-from
           value: $(params.forked-from)
         - name: dist-git-client-configdir
@@ -571,7 +577,7 @@ spec:
     - name: upload-to-quay
       params:
         - name: ociStorage
-          value: $(params.ociStorage)
+          value: $(params.ociStorage).built-artifacts
         - name: git-url
           value: $(params.git-url)
         - name: revision
@@ -592,8 +598,6 @@ spec:
           value: $(tasks.rpmbuild-ppc64le.results.rpmbuild-artifact)
         - name: script-environment-image
           value: $(params.script-environment-image)
-        - name: syft-image
-          value: $(params.syft-image)
       runAfter:
         - rpmbuild-s390x
         - rpmbuild-x86-64

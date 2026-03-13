@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Robert Sturla <rsturla@redhat.com>
+Date: Sat, 28 Feb 2026 13:04:02 +0000
+Subject: [PATCH 3/4] chore: add ulimit debug logging in rpmbuild
+
+Log ulimit values on the remote build host to aid debugging
+resource limit issues during RPM builds.
+---
+ task/rpmbuild.yaml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/task/rpmbuild.yaml b/task/rpmbuild.yaml
+index 7139dd5..804a3ee 100644
+--- a/task/rpmbuild.yaml
++++ b/task/rpmbuild.yaml
+@@ -160,6 +160,8 @@ spec:
+         fi
+ 
+         success=true
++        # Resource limits cause issues for some RPM builds, so display debug information for future analysis.
++        remote_cmd ulimit -a
+         if "$(params.hermetic)"; then
+           # Give mockbuilder rights to consume buildroot.
+           remote_cmd mkdir "$HOMEDIR/buildroot"
