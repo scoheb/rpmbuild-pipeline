@@ -49,9 +49,6 @@ spec:
     - description: RPM Build environment OCI image to run scripts in
       name: script-environment-image
       type: string
-    - description: Image to use for running syft
-      name: syft-image
-      type: string
   results:
     - name: IMAGE_URL
       description: Location of build artifact
@@ -105,7 +102,7 @@ spec:
         echo "Gathered `ls oras-staging | wc -l` files for upload"
 
     - name: push-to-quay-select-auth
-      image: quay.io/konflux-ci/oras:latest@sha256:4542f5a2a046ca36653749a8985e46744a5d2d36ee10ca14409be718ce15129e
+      image: quay.io/konflux-ci/oras:latest@sha256:d126f98e16bfad71aab782eb212a5be701e2cde915d294a7bd6423a4ab448705
       script: |
         #!/usr/bin/env bash
         set -e
@@ -115,10 +112,7 @@ spec:
         # Get NVR from any SRPM
         NVR=$(<nvr.log)
 
-        # Normalize NVR for OCI compatibility (tildes are not allowed in tags)
-        NVR_NORMALIZED="${NVR//[~+]/-}"
-
-        IMAGE_URL="$(params.ociStorage).nvr-$NVR_NORMALIZED"
+        IMAGE_URL="$(params.ociStorage)"
 
         echo "Selecting auth for $IMAGE_URL"
         select-oci-auth $IMAGE_URL > $HOME/auth.json
@@ -141,8 +135,15 @@ spec:
       workingDir: /var/workdir/results/oras-staging
       script: |
         #!/usr/bin/env bash
-        set +ex
-        set -o pipefail
+
+        # TODO(praiskup): RPM build code shouldn't be responsible for code
+        # scanning.  This heuristic for "best effort" archive extraction is
+        # incomplete and brittle (hence very risky), and should ideally be part
+        # of the Syft tooling (which likely performs all kinds of other
+        # heuristics, in a legitimate way).
+
+        export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") '
+        set -x
         # expects to parse all srpm files in /mnt
         # writes output to /mnt/syft-sbom.json
         SRCDIR=$(pwd)
@@ -152,24 +153,26 @@ spec:
         cd $TMPDIR || exit 1
         for rpm in $SRCDIR/*.src.rpm ; do
           echo "Extracting srpm $rpm"
-          rpm2archive -n "$rpm" | tar -x
+          rpm_fn=$(basename "$rpm")
+          cp "$rpm" .
+          rpm2archive -n "$rpm_fn" | tar -x
+          rm "$rpm_fn"
         done
 
         echo "Decompressing found archives"
         ( # limit the scope of nullglob
           shopt -s nullglob
           for tarball in *.tar* *.tg* ; do
-            if tar -tf "$tarball" &>/dev/null ; then
-              echo "Processing tar file: $tarball"
-              tar -xf "$tarball"
-            else
-              echo "Skipping non-archive file: $tarball"
-            fi
+            case $tarball in
+              *sig|*asc) continue ;;
+            esac
+            tar -vxf "$tarball"
           done
         )
         #unzip ./*.zip &>/dev/null # missing in mock image
+        true archive explosion finished
     - name: run-syft
-      image: $(params.syft-image)
+      image: registry.access.redhat.com/rh-syft-tech-preview/syft-rhel9:1.29.0@sha256:dc0da6b4448428e625271b542cc029ab03de92f75ea50d6d63b1d088d20bbd28
       workingDir: /var/workdir/results/oras-staging
       script: |
         syft ./syft-extracted -o spdx-json > syft-sbom.json
@@ -178,6 +181,7 @@ spec:
       workingDir: /var/workdir/results/oras-staging
       script: |
         #!/bin/bash
+        export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") '
         set -x
         python3 /usr/local/bin/merge_syft_sbom.py --sbom-spdx sbom-spdx.json --syft-sbom syft-sbom.json --sbom-merged sbom-merged.json
     - name: show-sbom
@@ -192,10 +196,10 @@ spec:
         #!/usr/bin/env bash
         set -e
 
-        if [ -f /pulp-access/oauth-cli.toml ]; then
+        if [ -f /pulp-access/cli.toml ]; then
           cd /pulp-access
           /usr/bin/pulp-upload.py \
-            --config oauth-cli.toml \
+            --config cli.toml \
             --repository_name "$(params.package-name)" \
             --rpm_path "/var/workdir/results" \
             --sbom_path "/var/workdir/results/oras-staging/sbom-merged.json" \

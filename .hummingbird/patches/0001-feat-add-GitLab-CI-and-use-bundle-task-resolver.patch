@@ -1,0 +1,433 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Robert Sturla <rsturla@redhat.com>
+Date: Sat, 28 Feb 2026 13:03:00 +0000
+Subject: [PATCH 1/4] feat: add GitLab CI and use bundle task resolver
+
+Add GitLab CI pipeline for building and publishing Tekton task/pipeline
+bundles to quay.io/hummingbird-ci/.
+
+Replace upstream's git resolver taskRefs (which use self-ref-url/revision
+parameters) with bundles resolver using __TASK_BUNDLE_TAG__ placeholders.
+The CI pipeline substitutes these at build time.
+
+Include an upstream:check CI job that runs 'make -C .hummingbird check'
+to verify root files stay in sync with .hummingbird/src + patches.
+---
+ .gitlab-ci.yml                  | 104 ++++++++++++++++++
+ docs/parameters.md              |   2 -
+ pipeline/build-rpm-package.yaml | 182 +++++++++++++++-----------------
+ 3 files changed, 188 insertions(+), 100 deletions(-)
+ create mode 100644 .gitlab-ci.yml
+
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+new file mode 100644
+index 0000000..60610d5
+--- /dev/null
++++ b/.gitlab-ci.yml
+@@ -0,0 +1,104 @@
++---
++workflow:
++  rules:
++    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
++          $CI_MERGE_REQUEST_EVENT_TYPE != 'merge_train'
++    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
++          $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
++    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
++
++stages:
++  - check
++  - build
++  - deploy
++
++default:
++  tags: [small-runner]
++  retry:
++    max: 2
++    when:
++      - runner_system_failure
++      - stuck_or_timeout_failure
++      - unknown_failure
++      - api_failure
++      - job_execution_timeout
++
++.rules:
++  mr: &mr
++    if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
++        $CI_MERGE_REQUEST_EVENT_TYPE != 'merge_train'
++  mr_train: &mr_train
++    if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
++        $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
++  mr_manual:
++    if: $CI_PIPELINE_SOURCE == 'merge_request_event'
++    when: manual
++    allow_failure: true
++  main: &main
++    if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
++
++upstream:check:
++  image: quay.io/hummingbird-ci/gitlab-ci:latest
++  stage: check
++  before_script:
++    - git submodule update --init
++  script:
++    - make -C .hummingbird check
++  rules:
++    - !reference [.rules, mr]
++    - !reference [.rules, mr_train]
++
++.bundle-push:
++  image: ghcr.io/tektoncd/plumbing/tkn:latest
++  script:
++    - |
++      sed -i "s|:__TASK_BUNDLE_TAG__|:${TASK_BUNDLE_TAG}|g" pipeline/build-rpm-package.yaml
++
++      for file in task/*.yaml; do
++        name="${file##*/}"
++        name="${name%.yaml}"
++        tkn bundle push --remote-username $QUAY_USERNAME --remote-password $QUAY_PASSWORD \
++          ${BUNDLE_EXTRA_ARGS:-} -f "$file" "quay.io/hummingbird-ci/rpmbuild-task-${name}:${TASK_BUNDLE_TAG}"
++      done
++
++      tkn bundle push --remote-username $QUAY_USERNAME --remote-password $QUAY_PASSWORD \
++        ${BUNDLE_EXTRA_ARGS:-} -f pipeline/build-rpm-package.yaml \
++        "quay.io/hummingbird-ci/rpmbuild-pipeline:${PIPELINE_BUNDLE_TAG}"
++
++bundles:validate:
++  image: quay.io/hummingbird-ci/gitlab-ci:latest
++  stage: check
++  script:
++    - |
++      for file in task/*.yaml pipeline/*.yaml; do
++        echo "Validating $file..."
++        yq eval '.' "$file" > /dev/null
++      done
++  rules:
++    - !reference [.rules, mr_train]
++
++bundles:test:
++  extends: .bundle-push
++  stage: build
++  variables:
++    TASK_BUNDLE_TAG: pipeline-${CI_PIPELINE_ID}
++    PIPELINE_BUNDLE_TAG: pipeline-${CI_PIPELINE_ID}
++    BUNDLE_EXTRA_ARGS: "--label quay.expires-after=7d"
++  rules:
++    - !reference [.rules, mr]
++
++bundles:release:
++  extends: .bundle-push
++  stage: deploy
++  variables:
++    TASK_BUNDLE_TAG: git-${CI_COMMIT_SHA}
++    PIPELINE_BUNDLE_TAG: git-${CI_COMMIT_SHA}
++  script:
++    - !reference [.bundle-push, script]
++    - |
++      tkn bundle push --remote-username $QUAY_USERNAME --remote-password $QUAY_PASSWORD \
++        -f pipeline/build-rpm-package.yaml \
++        "quay.io/hummingbird-ci/rpmbuild-pipeline:latest"
++  rules:
++    - !reference [.rules, mr_manual]
++    - !reference [.rules, main]
+diff --git a/docs/parameters.md b/docs/parameters.md
+index 404aeee..d4a1843 100644
+--- a/docs/parameters.md
++++ b/docs/parameters.md
+@@ -33,8 +33,6 @@ by the pipeline's CI.
+ 
+ | name                    | used in tasks |
+ | ---                     | ---           |
+-| self-ref-url            | process-sources, rpmbuild, upload-sbom |
+-| self-ref-revision       | process-sources, rpmbuild, upload-sbom |
+ | test-suffix             | import-to-quay |
+ 
+ 
+diff --git a/pipeline/build-rpm-package.yaml b/pipeline/build-rpm-package.yaml
+index a3ff123..3665951 100644
+--- a/pipeline/build-rpm-package.yaml
++++ b/pipeline/build-rpm-package.yaml
+@@ -87,18 +87,6 @@ spec:
+         - linux/ppc64le
+         - linux/s390x
+         - linux/amd64
+-    - name: self-ref-url
+-      description: |
+-        Testing-only.  This must be filled as parameter in tests so we can point
+-        at the Tasks for the same git-revision.
+-      type: string
+-      default: "https://github.com/konflux-ci/rpmbuild-pipeline.git"
+-    - name: self-ref-revision
+-      description: |
+-        Testing-only.  This must be filled as parameter in tests so we can point
+-        at the Tasks for the same git-revision.  For production it defaults to "main".
+-      type: string
+-      default: "main"
+     - description: |
+         Multi-arch container image that ships Mock + the needed Mock
+         configuration, dist-git-client, koji-client, and other RPM-build related
+@@ -238,16 +226,14 @@ spec:
+     - name: process-sources
+       retries: 3
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/process-sources.yaml
+-          - name: ociArtifactExpiresAfter
+-            value: $(params.ociArtifactExpiresAfter)
++          - name: name
++            value: process-sources
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-process-sources:__TASK_BUNDLE_TAG__
+       runAfter:
+         - clone-repository
+       params:
+@@ -276,14 +262,14 @@ spec:
+     - name: prepare-mock-config
+       retries: 3
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/prepare-mock-config.yaml
++          - name: name
++            value: prepare-mock-config
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-prepare-mock-config:__TASK_BUNDLE_TAG__
+       runAfter:
+         - clone-repository
+       params:
+@@ -323,14 +309,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/calculate-deps.yaml
++          - name: name
++            value: calculate-deps
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-calculate-deps:__TASK_BUNDLE_TAG__
+     - name: rpmbuild-x86-64
+       runAfter:
+         - calculate-deps-x86-64
+@@ -359,14 +345,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/rpmbuild.yaml
++          - name: name
++            value: rpmbuild
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-rpmbuild:__TASK_BUNDLE_TAG__
+     - name: calculate-deps-aarch64
+       runAfter:
+         - process-sources
+@@ -391,14 +377,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/calculate-deps.yaml
++          - name: name
++            value: calculate-deps
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-calculate-deps:__TASK_BUNDLE_TAG__
+     - name: rpmbuild-aarch64
+       runAfter:
+         - calculate-deps-aarch64
+@@ -427,14 +413,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/rpmbuild.yaml
++          - name: name
++            value: rpmbuild
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-rpmbuild:__TASK_BUNDLE_TAG__
+     - name: calculate-deps-s390x
+       runAfter:
+         - process-sources
+@@ -459,14 +445,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/calculate-deps.yaml
++          - name: name
++            value: calculate-deps
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-calculate-deps:__TASK_BUNDLE_TAG__
+     - name: rpmbuild-s390x
+       runAfter:
+         - calculate-deps-s390x
+@@ -495,14 +481,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/rpmbuild.yaml
++          - name: name
++            value: rpmbuild
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-rpmbuild:__TASK_BUNDLE_TAG__
+     - name: calculate-deps-ppc64le
+       runAfter:
+         - process-sources
+@@ -527,14 +513,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/calculate-deps.yaml
++          - name: name
++            value: calculate-deps
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-calculate-deps:__TASK_BUNDLE_TAG__
+     - name: rpmbuild-ppc64le
+       runAfter:
+         - calculate-deps-ppc64le
+@@ -563,14 +549,14 @@ spec:
+         - name: specfile
+           value: $(params.specfile)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/rpmbuild.yaml
++          - name: name
++            value: rpmbuild
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-rpmbuild:__TASK_BUNDLE_TAG__
+     - name: upload-to-quay
+       params:
+         - name: ociStorage
+@@ -601,14 +587,14 @@ spec:
+         - rpmbuild-aarch64
+         - rpmbuild-ppc64le
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/import-to-quay.yaml
++          - name: name
++            value: import-to-quay
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-import-to-quay:__TASK_BUNDLE_TAG__
+     - name: check-noarch-rpms
+       runAfter:
+         - rpmbuild-s390x
+@@ -627,14 +613,14 @@ spec:
+         - name: script-environment-image
+           value: $(params.script-environment-image)
+       taskRef:
+-        resolver: git
++        resolver: bundles
+         params:
+-          - name: url
+-            value: $(params.self-ref-url)
+-          - name: revision
+-            value: $(params.self-ref-revision)
+-          - name: pathInRepo
+-            value: task/check-noarch.yaml
++          - name: name
++            value: check-noarch
++          - name: kind
++            value: task
++          - name: bundle
++            value: quay.io/hummingbird-ci/rpmbuild-task-check-noarch:__TASK_BUNDLE_TAG__
+   workspaces:
+     - name: git-auth
+       optional: true

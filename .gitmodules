@@ -1,0 +1,3 @@
+[submodule ".hummingbird/src"]
+	path = .hummingbird/src
+	url = https://github.com/konflux-ci/rpmbuild-pipeline.git

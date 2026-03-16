@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Robert Sturla <rsturla@redhat.com>
+Date: Sat, 28 Feb 2026 13:13:25 +0000
+Subject: [PATCH 4/4] fix: exclude dnf5.log from chroot_scan output in rpmbuild
+
+DNF5 unconditionally writes verbose debug/info logs to dnf5.log (the
+DNF4 debuglevel option is not implemented in DNF5), producing thousands
+of lines of noise that bury actual build errors in CI output. Exclude it
+from the tar dump while keeping it available in the chroot_scan.tar.gz
+artifact for manual inspection if needed.
+---
+ task/rpmbuild.yaml | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/task/rpmbuild.yaml b/task/rpmbuild.yaml
+index 804a3ee..c732427 100644
+--- a/task/rpmbuild.yaml
++++ b/task/rpmbuild.yaml
+@@ -189,9 +189,14 @@ spec:
+           || success=false
+         fi
+ 
+-        # display dnf logs (no matter the mock exit status), and propagate the
+-        # mock failure (terminates the whole script)
+-        remote_cmd tar xfO $HOMEDIR/results/chroot_scan.tar.gz
++        # Display chroot_scan logs (no matter the mock exit status), excluding
++        # dnf5.log which is extremely verbose and buries useful error output.
++        # DNF5 unconditionally writes detailed debug/info logs to dnf5.log
++        # (the DNF4 debuglevel option is not implemented in DNF5), so this
++        # file contains thousands of lines of noise (plugin loading, librepo
++        # internals, RPM callback open/close for every package, etc.).
++        # The full dnf5.log is still available in chroot_scan.tar.gz if needed.
++        remote_cmd tar xfO $HOMEDIR/results/chroot_scan.tar.gz --exclude='*/dnf5.log'
+         $success
+ 
+         resultdir="$workdir/results/$arch"
