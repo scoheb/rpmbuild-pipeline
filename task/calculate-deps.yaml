@@ -15,8 +15,11 @@ spec:
     - description: Package name being built
       name: package-name
       type: string
-    - description: The platform/architecture we build for
+    - description: The platform/architecture we build on
       name: PLATFORM
+      type: string
+    - description: The architecture we build for
+      name: arch
       type: string
     - description: The branch name we build against/from
       name: target-branch
@@ -51,12 +54,12 @@ spec:
         name: workdir
   steps:
     - name: use-trusted-artifact
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - use
         - $(params.dependencies-artifact)=/var/workdir/source
     - name: use-trusted-artifact-mock-config
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - use
         - $(params.mock-config-template-file)=/var/workdir/mock-config
@@ -81,13 +84,6 @@ spec:
           cp /ssh/id_rsa ~/.ssh
         fi
 
-        arch=x86_64
-        case $(params.PLATFORM) in
-          *s390x) arch=s390x ;;
-          *ppc64le) arch=ppc64le ;;
-          *arm64) arch=aarch64 ;;
-        esac
-
         chmod 0400 ~/.ssh/id_rsa
         export SSH_HOST=$(cat /ssh/host)
         export HOMEDIR=$(cat /ssh/user-dir)
@@ -105,8 +101,13 @@ spec:
 
         remote_cmd echo "Hello from the other side!"
 
+        if [ $(params.arch) == "i686" ] ; then
+          mock_arch=i386
+        else
+          mock_arch=$(params.arch)
+        fi
         # Instantiate the given Mock config template for our architecture.
-        sed "s|@ARCH@|$arch|" "$workdir/mock-config/mock.cfg" > "$workdir/mock.cfg"
+        sed "s|@ARCH@|$mock_arch|" "$workdir/mock-config/mock.cfg" > "$workdir/mock.cfg"
         send "$workdir/mock.cfg" "$HOMEDIR/mock.cfg"
 
         # Allow mockbuilder (group mock) to read sources, and write results
@@ -145,8 +146,9 @@ spec:
                 --calculate-build-dependencies \
         || success=false
 
-        # display dnf logs (no matter the mock exit status), and propagate the
-        # mock failure (terminates the whole script)
+        # Display DNF logs regardless of the Mock exit status, then propagate
+        # any Mock failure to terminate the script (sync with
+        # rpmbuild.yaml).
         remote_cmd "tar xvfO '$HOMEDIR'/results/chroot_scan.tar.gz 2>&1 | cat"
         $success
 
@@ -156,12 +158,27 @@ spec:
             --lockfile /results/buildroot_lock.json \
             --output-repo /results/buildroot_repo
 
-        resultdir=$workdir/results/$arch/results
+        # Generate ancestors data for SBOM using the expanded specfile
+        # produced by the expand_spec mock plugin.
+        remote_cmd podman run -u mockbuilder \
+                              --network=none \
+                              -v "$HOMEDIR/source:/source" \
+                              -v "$HOMEDIR/results:/results" \
+                              --privileged --rm -ti "$mock_img" \
+            gen_ancestors_from_src.py \
+                -s /source \
+                --specfile /results/expanded-spec.txt \
+                --forked-from "https://src.fedoraproject.org/rpms/$(params.package-name)" \
+                -o /results/ancestors.json
+
+        resultdir=$workdir/results/$(params.arch)/results
         mkdir -p "$resultdir"
         # Send only repo and lockfile, ignore other artifacts
         receive "$HOMEDIR/results/buildroot_lock.json" "$resultdir/buildroot_lock.json"
         receive "$HOMEDIR/results/buildroot_repo" "$resultdir"
+        receive "$HOMEDIR/results/ancestors.json" "$resultdir/ancestors.json"
         cat "$resultdir/buildroot_lock.json"
+        cat "$resultdir/ancestors.json"
       volumeMounts:
         - mountPath: /ssh
           name: ssh
@@ -170,7 +187,7 @@ spec:
         requests:
           ephemeral-storage: 5Gi
     - name: create-trusted-artifact
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - create
         - --store

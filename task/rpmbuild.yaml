@@ -16,8 +16,11 @@ spec:
     - description: Package name being built
       name: package-name
       type: string
-    - description: The platform/architecture we build for
+    - description: The platform/architecture we build on
       name: PLATFORM
+      type: string
+    - description: The architecture we build for
+      name: arch
       type: string
     - description: The branch name we build against/from
       name: target-branch
@@ -61,17 +64,17 @@ spec:
         name: workdir
   steps:
     - name: use-trusted-artifact-source
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - use
         - $(params.dependencies-artifact)=/var/workdir/source
     - name: use-trusted-artifact-results
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - use
         - $(params.calculation-artifact)=/var/workdir/results
     - name: use-trusted-artifact-mock-config
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - use
         - $(params.mock-config-template-file)=/var/workdir/mock-config
@@ -95,13 +98,6 @@ spec:
         else
           cp /ssh/id_rsa ~/.ssh
         fi
-
-        arch=x86_64
-        case $(params.PLATFORM) in
-          *s390x) arch=s390x ;;
-          *ppc64le) arch=ppc64le ;;
-          *arm64) arch=aarch64 ;;
-        esac
 
         chmod 0400 ~/.ssh/id_rsa
         export SSH_HOST=$(cat /ssh/host)
@@ -166,7 +162,7 @@ spec:
           # Give mockbuilder rights to consume buildroot.
           remote_cmd mkdir "$HOMEDIR/buildroot"
           remote_cmd podman unshare setfacl -m g:135:r-x -m default:g:135:r-x "$HOMEDIR/buildroot"
-          send "$workdir/results/$arch/results" "$HOMEDIR/buildroot"
+          send "$workdir/results/$(params.arch)/results" "$HOMEDIR/buildroot"
 
           remote_cmd podman run --network=none \
                                 -v "$HOMEDIR/buildroot:/buildroot" \
@@ -178,8 +174,13 @@ spec:
                   --sources /source --resultdir /results \
           || success=false
         else
+          if [ $(params.arch) == "i686" ] ; then
+            mock_arch=i386
+          else
+            mock_arch=$(params.arch)
+          fi
           # Instantiate the given Mock config template for our architecture.
-          sed "s|@ARCH@|$arch|" "$workdir/mock-config/mock.cfg" > "$workdir/mock.cfg"
+          sed "s|@ARCH@|$mock_arch|" "$workdir/mock-config/mock.cfg" > "$workdir/mock.cfg"
           send "$workdir/mock.cfg" "$HOMEDIR/mock.cfg"
           remote_cmd podman run -v "$HOMEDIR/mock.cfg:/mock.cfg" \
                                 "${podman_params[@]}" \
@@ -189,25 +190,47 @@ spec:
           || success=false
         fi
 
-        # Display chroot_scan logs (no matter the mock exit status), excluding
-        # dnf5.log which is extremely verbose and buries useful error output.
-        # DNF5 unconditionally writes detailed debug/info logs to dnf5.log
-        # (the DNF4 debuglevel option is not implemented in DNF5), so this
-        # file contains thousands of lines of noise (plugin loading, librepo
-        # internals, RPM callback open/close for every package, etc.).
-        # The full dnf5.log is still available in chroot_scan.tar.gz if needed.
-        remote_cmd tar xfO $HOMEDIR/results/chroot_scan.tar.gz --exclude='*/dnf5.log'
+        # Display DNF logs regardless of the Mock exit status, then propagate
+        # any Mock failure to terminate the script.  Preserving the DNF logs in
+        # the output allows for troubleshooting intermittent DNF errors (e.g.,
+        # those with mirrored repos):
+        # https://github.com/rpm-software-management/dnf5/issues/1673
+        # (sync with calculate-deps.yaml)
+        remote_cmd "tar xvfO '$HOMEDIR'/results/chroot_scan.tar.gz 2>&1 | cat"
         $success
 
-        resultdir="$workdir/results/$arch"
+        resultdir="$workdir/results/$(params.arch)"
         mkdir -p "$resultdir"
         receive "$HOMEDIR/results/" "$resultdir"
+
+        # For non-hermetic builds, ancestors.json may not exist from
+        # calculate-deps.  Generate it here using the expanded specfile
+        # produced by the expand_spec mock plugin.
+        if [ -f "$resultdir/results/ancestors.json" ]; then
+          echo "ancestors.json already exists, skipping generation"
+        elif [ ! -f "$resultdir/expanded-spec.txt" ]; then
+          echo "WARNING: expanded-spec.txt not found in results, cannot generate ancestors.json" >&2
+        else
+          remote_cmd podman run -u mockbuilder \
+                                --network=none \
+                                -v "$HOMEDIR/source:/source" \
+                                -v "$HOMEDIR/results:/results" \
+                                --privileged --rm -ti "$mock_img" \
+              gen_ancestors_from_src.py \
+                  -s /source \
+                  --specfile /results/expanded-spec.txt \
+                  --forked-from "https://src.fedoraproject.org/rpms/$(params.package-name)" \
+                  -o /results/ancestors.json
+          mkdir -p "$resultdir/results"
+          receive "$HOMEDIR/results/ancestors.json" "$resultdir/results/ancestors.json"
+          cat "$resultdir/results/ancestors.json"
+        fi
       volumeMounts:
         - mountPath: /ssh
           name: ssh
           readOnly: true
     - name: create-trusted-artifact
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:9b180776a41d9a22a1c51539f1647c60defbbd55b44bbebdd4130e33512d8b0d
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:0388f83b0a0f02e1b814f62e660a68c56f283fe3092371d00bf5ce743f53be2f
       args:
         - create
         - --store
