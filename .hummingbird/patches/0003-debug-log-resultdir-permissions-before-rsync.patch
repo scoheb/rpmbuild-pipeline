@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Scott Hebert <shebert@redhat.com>
+Date: Sun, 27 Apr 2026 13:00:00 -0400
+Subject: [PATCH 3/3] debug: log resultdir permissions before rsync
+
+Log file ownership and permissions on the remote builder's results
+directory before rsync to diagnose Permission denied errors on RPM
+files.
+
+Signed-off-by: Scott Hebert <shebert@redhat.com>
+---
+ task/rpmbuild.yaml | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/task/rpmbuild.yaml b/task/rpmbuild.yaml
+index 3570ddb..23da645 100644
+--- a/task/rpmbuild.yaml
++++ b/task/rpmbuild.yaml
+@@ -199,6 +199,11 @@ spec:
+         remote_cmd "tar xvfO '$HOMEDIR'/results/chroot_scan.tar.gz 2>&1 | cat"
+         $success
+
++        echo "DEBUG: resultdir file ownership and permissions on remote host"
++        remote_cmd ls -la "$HOMEDIR/results/"
++        remote_cmd stat -c "'%a %U:%G %n'" "$HOMEDIR/results/"'*'
++        remote_cmd getfacl "$HOMEDIR/results/"
++
+         resultdir="$workdir/results/$(params.arch)"
+         mkdir -p "$resultdir"
+         receive "$HOMEDIR/results/" "$resultdir"
